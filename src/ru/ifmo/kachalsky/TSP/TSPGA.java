@@ -81,45 +81,35 @@ public class TSPGA {
         out.close();
     }
 
-    private Path solve(int n, int toBeat, int[][] distances) {
+    Path solve(int n, int toBeat, int[][] distances) {
         ArrayList<City> cities = new ArrayList<>();
         for (int i = 0; i < n; i++) {
             cities.add(new City(distances[i], i));
         }
 
         SplittableRandom random = new SplittableRandom(1228);
-        int populationSize = 118;
-        int keep = 1;
-        int tournament = 25;
-
+        int populationSize = 121;
         ArrayList<Path> paths = new ArrayList<>();
         for (int i = 0; i < populationSize; i++) {
             paths.add(new Path(cities, toBeat, i));
         }
 
 
-        Population population = new Population(paths, n, random);
+        Population population = new Population(paths, n,random);
         Path best = population.best();
         while (best.length() > toBeat) {
             Population newPopulation = new Population(populationSize, n, random);
             newPopulation.add(best); // elitism
-            /*for (int i = 1; i < populationSize; i++) {
-                *//*Path parent1 = population.tournament(25);
+            for (int i = 0; i < (populationSize - 1) / 2; i++) {
+                Path parent1 = population.tournament(25);
                 Path parent2 = population.tournament(25);
                 newPopulation.add(parent1.crossover(parent2, nextInt(n, random), nextInt(n, random)));
-                newPopulation.add(parent2.crossover(parent1, nextInt(n, random), nextInt(n, random)));*//*
-                newPopulation.add(population.wheelCrossover());
-            }*/
-            for (int i = 0; i < populationSize / 2; i++) {
-                Path parent1 = population.tournament(tournament);
-                Path parent2 = population.tournament(tournament);
-                newPopulation.add(parent1.crossover(parent2, nextInt(n, random), nextInt(n, random)));
                 newPopulation.add(parent2.crossover(parent1, nextInt(n, random), nextInt(n, random)));
-                //newPopulation.add(population.wheelCrossover());
             }
             population = newPopulation;
             population.mutate();
             best = population.best();
+            //System.out.println(best.length());
         }
 
         return best;
@@ -233,7 +223,7 @@ class Path {
     }
 
     public double fitness() {
-        if (fitness == 0.0) {
+        if (fitness == 0) {
             fitness = (double) goal / (double) length();
         }
         return fitness;
@@ -258,7 +248,6 @@ class Population {
     private int size;
     private SplittableRandom random;
     private int pathSize;
-    private double sum = 0.0;
 
     public int getSize() {
         return size;
@@ -283,7 +272,6 @@ class Population {
     }
 
     public void mutate() {
-        sum = 0.0;
         for (Path path : paths) {
             path.swap(nextPathIndex(), nextPathIndex());
         }
@@ -304,23 +292,18 @@ class Population {
     }
 
     public Path wheelCrossover() {
-        if (sum == 0.0) {
-            double sum = 0.0;
-            paths.sort((o1, o2) -> Double.compare(o2.fitness(), o1.fitness()));
-            for (Path path : paths) {
-                sum += path.fitness();
-            }
-            this.sum = sum;
+        double sum = 0.0;
+        paths.sort((o1, o2) -> Double.compare(o2.fitness(), o1.fitness()));
+        for (Path path : paths) {
+            sum += path.fitness();
         }
 
         Path parent1 = paths.get(0);
         double number = random.nextDouble() * sum;
         for (Path path : paths) {
             number -= path.fitness();
-            if (number <= 0) {
+            if (number <= 0)
                 parent1 = path;
-                break;
-            }
         }
 
         Path parent2 = paths.get(0);
@@ -328,10 +311,8 @@ class Population {
         for (Path path : paths) {
             if (path != parent1)
                 number2 -= path.fitness();
-            if (number2 <= 0) {
+            if (number2 <= 0)
                 parent2 = path;
-                break;
-            }
         }
         return parent1.crossover(parent2, nextPathIndex(), nextPathIndex());
     }
