@@ -81,37 +81,52 @@ public class TSPGA {
         out.close();
     }
 
-    Path solve(int n, int toBeat, int[][] distances) {
+    private Path solve(int n, int toBeat, int[][] distances) {
         ArrayList<City> cities = new ArrayList<>();
         for (int i = 0; i < n; i++) {
             cities.add(new City(distances[i], i));
         }
 
-        int populationSize = 50;
+        SplittableRandom random = new SplittableRandom(1228);
+        int populationSize = 118;
+        int keep = 1;
+        int tournament = 25;
+
         ArrayList<Path> paths = new ArrayList<>();
         for (int i = 0; i < populationSize; i++) {
-            paths.add(new Path(cities, toBeat));
+            paths.add(new Path(cities, toBeat, i));
         }
 
-        Population population = new Population(paths);
+
+        Population population = new Population(paths, n, random);
         Path best = population.best();
         while (best.length() > toBeat) {
-            Population newPopulation = new Population(populationSize);
+            Population newPopulation = new Population(populationSize, n, random);
             newPopulation.add(best); // elitism
-            for (int i = 0; i < populationSize - 1; i++) {
-                Path parent1 = population.tournament(10);
-                Path parent2 = population.tournament(10);
-                newPopulation.add(parent1.crossover(parent2));
+            /*for (int i = 1; i < populationSize; i++) {
+                *//*Path parent1 = population.tournament(25);
+                Path parent2 = population.tournament(25);
+                newPopulation.add(parent1.crossover(parent2, nextInt(n, random), nextInt(n, random)));
+                newPopulation.add(parent2.crossover(parent1, nextInt(n, random), nextInt(n, random)));*//*
+                newPopulation.add(population.wheelCrossover());
+            }*/
+            for (int i = 0; i < populationSize / 2; i++) {
+                Path parent1 = population.tournament(tournament);
+                Path parent2 = population.tournament(tournament);
+                newPopulation.add(parent1.crossover(parent2, nextInt(n, random), nextInt(n, random)));
+                newPopulation.add(parent2.crossover(parent1, nextInt(n, random), nextInt(n, random)));
                 //newPopulation.add(population.wheelCrossover());
             }
             population = newPopulation;
             population.mutate();
             best = population.best();
-            //System.out.println(best.length());
         }
 
-
         return best;
+    }
+
+    int nextInt(int n, SplittableRandom random) {
+        return (int) (random.nextDouble() * n);
     }
 }
 
@@ -154,21 +169,15 @@ class Path {
         this.path.set(i, city);
     }
 
-    public Path(ArrayList<City> path, int goal) {
+    public Path(ArrayList<City> path, int goal, int seed) {
         this.path = new ArrayList<>(path);
-        Collections.shuffle(path);
+        Collections.shuffle(path, new Random(seed));
         this.goal = goal;
         this.size = path.size();
     }
 
-    private int rIndex() {
-        return (int) (Math.random() * size);
-    }
-
-    public void mutate() {
+    public void swap(int i, int j) {
         nullCache();
-        int i = rIndex();
-        int j = rIndex();
         Collections.swap(path, i, j);
     }
 
@@ -190,9 +199,7 @@ class Path {
         path.set(path.indexOf(null), city);
     }
 
-    public Path crossover(Path other) {
-        int from = rIndex();
-        int to = rIndex();
+    public Path crossover(Path other, int from, int to) {
         if (from > to) {
             int swap = to;
             to = from;
@@ -226,7 +233,7 @@ class Path {
     }
 
     public double fitness() {
-        if (fitness == 0) {
+        if (fitness == 0.0) {
             fitness = (double) goal / (double) length();
         }
         return fitness;
@@ -249,15 +256,26 @@ class Path {
 class Population {
     private ArrayList<Path> paths;
     private int size;
+    private SplittableRandom random;
+    private int pathSize;
+    private double sum = 0.0;
 
-    public Population(ArrayList<Path> paths) {
-        this.paths = paths;
-        this.size = this.paths.size();
+    public int getSize() {
+        return size;
     }
 
-    public Population(int size) {
+    public Population(ArrayList<Path> paths, int pathSize, SplittableRandom random) {
+        this.paths = paths;
+        this.size = this.paths.size();
+        this.pathSize = pathSize;
+        this.random = random;
+    }
+
+    public Population(int size, int pathSize, SplittableRandom random) {
         this.paths = new ArrayList<>();
         this.size = size;
+        this.pathSize = pathSize;
+        this.random = random;
     }
 
     public void add(Path path) {
@@ -265,15 +283,20 @@ class Population {
     }
 
     public void mutate() {
+        sum = 0.0;
         for (Path path : paths) {
-            path.mutate();
+            path.swap(nextPathIndex(), nextPathIndex());
         }
     }
 
+    public int nextPathIndex() {
+        return (int) (random.nextDouble() * pathSize);
+    }
+
     public Path tournament(int n) {
-        Population tournament = new Population(n);
+        Population tournament = new Population(n, pathSize, random);
         for (int i = 0; i < n; i++) {
-            int randomId = (int) (Math.random() * size);
+            int randomId = (int) (random.nextDouble() * size);
             tournament.add(paths.get(randomId));
         }
         // Get the fittest tour
@@ -281,29 +304,36 @@ class Population {
     }
 
     public Path wheelCrossover() {
-        double sum = 0.0;
-        paths.sort((o1, o2) -> Double.compare(o2.fitness(), o1.fitness()));
-        for (Path path: paths) {
-            sum += path.fitness();
+        if (sum == 0.0) {
+            double sum = 0.0;
+            paths.sort((o1, o2) -> Double.compare(o2.fitness(), o1.fitness()));
+            for (Path path : paths) {
+                sum += path.fitness();
+            }
+            this.sum = sum;
         }
 
         Path parent1 = paths.get(0);
-        double number = Math.random() * sum;
-        for (Path path: paths) {
+        double number = random.nextDouble() * sum;
+        for (Path path : paths) {
             number -= path.fitness();
-            if (number <= 0)
+            if (number <= 0) {
                 parent1 = path;
+                break;
+            }
         }
 
         Path parent2 = paths.get(0);
-        double number2 = Math.random() * (sum - parent1.fitness());
-        for (Path path: paths) {
+        double number2 = random.nextDouble() * (sum - parent1.fitness());
+        for (Path path : paths) {
             if (path != parent1)
                 number2 -= path.fitness();
-            if (number2 <= 0)
+            if (number2 <= 0) {
                 parent2 = path;
+                break;
+            }
         }
-        return parent1.crossover(parent2);
+        return parent1.crossover(parent2, nextPathIndex(), nextPathIndex());
     }
 
     public Path best() {
