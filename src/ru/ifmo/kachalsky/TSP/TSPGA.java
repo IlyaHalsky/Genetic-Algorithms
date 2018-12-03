@@ -76,27 +76,27 @@ public class TSPGA {
 
 
         Writer out = new PrintWriter(new FileWriter("tsp.out"));
-        System.out.println(answer.toString());
+        //System.out.println(answer.toString());
         out.write(answer.toString());
         out.close();
     }
 
     private Path solve(int n, int toBeat, int[][] distances) {
         ArrayList<City> cities = new ArrayList<>();
-        for (int i = 1; i < n; i++) {
+        for (int i = 0; i < n; i++) {
             cities.add(new City(distances[i], i));
         }
-        City first = new City(distances[0], 0);
+
 
         SplittableRandom random = new SplittableRandom(1228);
         int populationSize = 121;
         int crossoverSize = (populationSize - 1) / 2;
         int keep = 1;
-        int tournament = 30;
+        int tournament = 25;
 
         ArrayList<Path> paths = new ArrayList<>();
         for (int i = 0; i < populationSize; i++) {
-            paths.add(new Path(first, cities, toBeat, i));
+            paths.add(new Path(cities, toBeat, i));
         }
 
 
@@ -105,7 +105,7 @@ public class TSPGA {
         int iter = 0;
         while (best.length() > toBeat) {
             iter++;
-            Population newPopulation = new Population(populationSize, n, random);
+            Population newPopulation = new Population(populationSize, n , random);
             newPopulation.add(best); // elitism
             /*for (int i = 1; i < populationSize; i++) {
              *//*Path parent1 = population.tournament(25);
@@ -117,14 +117,19 @@ public class TSPGA {
             for (int i = 0; i < crossoverSize; i++) {
                 Path parent1 = population.tournament(tournament);
                 Path parent2 = population.tournament(tournament);
-                newPopulation.add(parent1.crossover(parent2, nextInt(n, random), nextInt(n, random)));
-                newPopulation.add(parent2.crossover(parent1, nextInt(n, random), nextInt(n, random)));
+                Path[] cross = parent1.crossoverCycl(parent2);
+                newPopulation.add(cross[0]);
+                newPopulation.add(cross[1]);
+                /*newPopulation.add(parent1.crossoverCycl(parent2*//*, nextInt(n, random), nextInt(n, random)*//*));
+                newPopulation.add(parent2.crossoverCycl(parent1*//*, nextInt(n, random), nextInt(n, random)*//*));*/
             }
             population = newPopulation;
             population.mutate();
+            //System.out.println(iter);
             best = population.best();
         }
-        System.out.println(iter);
+        //System.out.println(iter);
+        //System.out.println(best.length());
         return best;
     }
 
@@ -160,24 +165,24 @@ class Path {
 
     public Path(int size, int goal) {
         this.path = new ArrayList<>();
+        this.goal = goal;
+        this.size = size;
+    }
+
+    public Path(int size, int goal, boolean nill) {
+        this.path = new ArrayList<>(size);
         for (int i = 0; i < size; i++) {
-            this.path.add(null);
+            path.add(null);
         }
         this.goal = goal;
         this.size = size;
     }
 
-    public void setCity(int i, City city) {
-        nullCache();
-        this.path.set(i, city);
-    }
-
-    public Path(City first, ArrayList<City> path, int goal, int seed) {
+    public Path(ArrayList<City> path, int goal, int seed) {
         this.path = new ArrayList<>(path);
         Collections.shuffle(this.path, new Random(seed));
-        this.path.add(0, first);
         this.goal = goal;
-        this.size = path.size() + 1;
+        this.size = path.size();
     }
 
     public void swap(int i, int j) {
@@ -190,17 +195,16 @@ class Path {
         fitness = 0;
     }
 
-    public boolean has(City city) {
-        return path.contains(city);
-    }
-
     public City get(int i) {
         return path.get(i);
     }
 
+    public void add(int i, City city) {
+        path.add(i, city);
+    }
+
     public void add(City city) {
-        nullCache();
-        path.set(path.indexOf(null), city);
+        path.add(city);
     }
 
     public Path crossover(Path other, int from, int to) {
@@ -211,15 +215,61 @@ class Path {
         }
 
         Path child = new Path(size, goal);
+        Set<City> used = new HashSet<>();
         for (int i = from; i < to; i++) {
-            child.setCity(i, path.get(i));
+            City toAdd = path.get(i);
+            child.add(toAdd);
+            used.add(toAdd);
         }
         for (int i = 0; i < size; i++) {
-            if (!child.has(other.get(i))) {
-                child.add(other.get(i));
+            City toAdd = other.get(i);
+            if (used.contains(toAdd)) {
+                continue;
+            }
+            if (i < from) {
+                child.add(0, toAdd);
+            } else {
+                child.add(toAdd);
             }
         }
         return child;
+    }
+
+    public Path[] crossoverCycl(Path other) {
+        if (this.equals(other)) {
+            return new Path[]{this, other};
+        }
+        Path child = new Path(size, goal, false);
+        boolean[] crossed = new boolean[size];
+        Set<City> used = new HashSet<>();
+        boolean cycle = false;
+        City last = path.get(0);
+        child.path.set(0, last);
+        crossed[0] = true;
+        int crossedC = 1;
+        while (!cycle) {
+            cycle = used.contains(last);
+            used.add(last);
+            int insertI = other.path.indexOf(last);
+            crossed[insertI] = true;
+            City add = path.get(insertI);
+            child.path.set(insertI, add);
+            crossedC ++;
+            last = add;
+        }
+        if (crossedC > size)
+            return new Path[]{this, other};
+        Path child2 = new Path(size, goal);
+        for (int i = 0; i < size; i++) {
+            if (crossed[i]) {
+                child2.add(other.path.get(i));
+            } else {
+                child2.add(path.get(i));
+                child.path.set(i, other.path.get(i));
+            }
+        }
+
+        return new Path[]{child, child2};
     }
 
     public int length() {
@@ -263,10 +313,8 @@ class Population {
     private SplittableRandom random;
     private int pathSize;
     private double sum = 0.0;
-
-    public int getSize() {
-        return size;
-    }
+    private boolean sorted = false;
+    private double best = 0.0;
 
     public Population(ArrayList<Path> paths, int pathSize, SplittableRandom random) {
         this.paths = paths;
@@ -289,7 +337,7 @@ class Population {
     public void mutate() {
         sum = 0.0;
         for (Path path : paths) {
-            path.swap(nextPathIndex(1), nextPathIndex(1));
+            path.swap(nextPathIndex(), nextPathIndex());
         }
     }
 
@@ -297,18 +345,18 @@ class Population {
         return (int) (random.nextDouble() * pathSize);
     }
 
-    public int nextPathIndex(int from) {
-        return (int) (random.nextDouble() * (pathSize - from) + from);
-    }
-
     public Path tournament(int n) {
-        Population tournament = new Population(n, pathSize, random);
-        for (int i = 0; i < n; i++) {
-            int randomId = (int) (random.nextDouble() * size);
-            tournament.add(paths.get(randomId));
+        if (sorted) {
+            return paths.get((int) (random.doubles(n).min().getAsDouble() * size));
+        } else {
+            Population tournament = new Population(n, pathSize, random);
+            for (int i = 0; i < n; i++) {
+                int randomId = (int) (random.nextDouble() * size);
+                tournament.add(paths.get(randomId));
+            }
+            // Get the fittest tour
+            return tournament.best();
         }
-        // Get the fittest tour
-        return tournament.best();
     }
 
     public Path wheelCrossover() {
@@ -345,11 +393,8 @@ class Population {
     }
 
     public Path best() {
-        Path best = paths.get(0);
-        for (int i = 1; i < paths.size(); i++) {
-            if (best.length() > paths.get(i).length())
-                best = paths.get(i);
-        }
-        return best;
+        sorted = true;
+        paths.sort(Comparator.comparingInt(Path::length));
+        return paths.get(0);
     }
 }
