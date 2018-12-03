@@ -83,45 +83,48 @@ public class TSPGA {
 
     private Path solve(int n, int toBeat, int[][] distances) {
         ArrayList<City> cities = new ArrayList<>();
-        for (int i = 0; i < n; i++) {
+        for (int i = 1; i < n; i++) {
             cities.add(new City(distances[i], i));
         }
+        City first = new City(distances[0], 0);
 
         SplittableRandom random = new SplittableRandom(1228);
-        int populationSize = 118;
+        int populationSize = 121;
+        int crossoverSize = (populationSize - 1) / 2;
         int keep = 1;
-        int tournament = 25;
+        int tournament = 30;
 
         ArrayList<Path> paths = new ArrayList<>();
         for (int i = 0; i < populationSize; i++) {
-            paths.add(new Path(cities, toBeat, i));
+            paths.add(new Path(first, cities, toBeat, i));
         }
 
 
         Population population = new Population(paths, n, random);
         Path best = population.best();
+        int iter = 0;
         while (best.length() > toBeat) {
+            iter++;
             Population newPopulation = new Population(populationSize, n, random);
             newPopulation.add(best); // elitism
             /*for (int i = 1; i < populationSize; i++) {
-                *//*Path parent1 = population.tournament(25);
+             *//*Path parent1 = population.tournament(25);
                 Path parent2 = population.tournament(25);
                 newPopulation.add(parent1.crossover(parent2, nextInt(n, random), nextInt(n, random)));
                 newPopulation.add(parent2.crossover(parent1, nextInt(n, random), nextInt(n, random)));*//*
                 newPopulation.add(population.wheelCrossover());
             }*/
-            for (int i = 0; i < populationSize / 2; i++) {
+            for (int i = 0; i < crossoverSize; i++) {
                 Path parent1 = population.tournament(tournament);
                 Path parent2 = population.tournament(tournament);
                 newPopulation.add(parent1.crossover(parent2, nextInt(n, random), nextInt(n, random)));
                 newPopulation.add(parent2.crossover(parent1, nextInt(n, random), nextInt(n, random)));
-                //newPopulation.add(population.wheelCrossover());
             }
             population = newPopulation;
             population.mutate();
             best = population.best();
         }
-
+        System.out.println(iter);
         return best;
     }
 
@@ -169,11 +172,12 @@ class Path {
         this.path.set(i, city);
     }
 
-    public Path(ArrayList<City> path, int goal, int seed) {
+    public Path(City first, ArrayList<City> path, int goal, int seed) {
         this.path = new ArrayList<>(path);
-        Collections.shuffle(path, new Random(seed));
+        Collections.shuffle(this.path, new Random(seed));
+        this.path.add(0, first);
         this.goal = goal;
-        this.size = path.size();
+        this.size = path.size() + 1;
     }
 
     public void swap(int i, int j) {
@@ -285,12 +289,16 @@ class Population {
     public void mutate() {
         sum = 0.0;
         for (Path path : paths) {
-            path.swap(nextPathIndex(), nextPathIndex());
+            path.swap(nextPathIndex(1), nextPathIndex(1));
         }
     }
 
     public int nextPathIndex() {
         return (int) (random.nextDouble() * pathSize);
+    }
+
+    public int nextPathIndex(int from) {
+        return (int) (random.nextDouble() * (pathSize - from) + from);
     }
 
     public Path tournament(int n) {
