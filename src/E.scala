@@ -16,7 +16,7 @@ object E extends App {
 
   def findTreasure(start: Circle)(implicit console: Console): (Int, Int) = {
     def getCircle(point: Point): Circle =
-      C(point, console.activate(point).distance(true))
+      C(point, console.activate(point, true))
 
     val center = start.center
     val left = getCircle(center.move(-1, 0))
@@ -31,8 +31,8 @@ object E extends App {
       case (None, Some(p)) ⇒
         p.toInt
       case (Some(p1), Some(p2)) ⇒
-        val d1 = console.activate(p1).distance(true)
-        val d2 = console.activate(p2).distance(true)
+        val d1 = console.activate(p1, true)
+        val d2 = console.activate(p2, true)
         if (d1 <= d2)
           p1.toInt
         else
@@ -41,20 +41,20 @@ object E extends App {
   }
 
   def findLabyrinth(mn: (Int, Int))(implicit console: Console): Labyrinth = {
-    val circles: Seq[Circle] =
+    val circles: Array[Circle] =
       for {
-        angle ← Range(0, 360, 10)
+        angle ← Range(0, 360, 10).toArray
         rad = toRadians(angle)
       } yield {
         val searchPoint = IntP(r * cos(rad), r * sin(rad))
-        C(searchPoint, console.activate(searchPoint).distance())
+        C(searchPoint, console.activate(searchPoint))
       }
-    val points = (for {
-      Seq(c1, c2, c3) ← circles.sliding(3).toList
+    val points = for {
+      i ← 0 until (circles.length-3)
     } yield {
-      c1 /\ c2 /\ c3
-    }).flatten
-    val labPoints = findUnique(points)
+      circles(i) /\ circles(i+1) /\ circles(i+2)
+    }
+    val labPoints = findUnique(points.flatten.toList)
     assert(labPoints.size >= 3)
     Labyrinth(labPoints, mn)
   }
@@ -104,7 +104,7 @@ case class Labyrinth(points: List[Point], mn: (Int, Int)) {
       j ← 0 until n
     } yield {
       val testP = getPoint(i, j)
-      val response = console.activate(testP).distance(true)
+      val response = console.activate(testP, true)
       if (minP == Point(10000000.0, 10000000.0) || response < minD) {
         minD = response
         minP = testP
@@ -234,21 +234,25 @@ class Console {
   private val reader = new BufferedReader(new InputStreamReader(System.in))
 
   def getMN: (Int, Int) = {
-    val in = readLine.map(_.toInt)
-    (in.head, in.last)
+    val in = readLine
+    (in(0).toInt, in(1).toInt)
   }
 
 
-  def activate(point: Point): Response = {
+  def activate(point: Point, inside: Boolean = false): Double = {
     println(f"activate ${point.x}%.9f ${point.y}%.9f")
     val input = readLine
-    val header = input.head
+    val header = input(0)
     if (header == "inside") {
-      Inside(input(1).toDouble)
+      input(1).toDouble
     } else if (header == "blocked") {
-      Blocked()
+      1000000.0
     } else {
-      Outside(input(1).toDouble)
+      if (inside) {
+        1000000.0
+      } else {
+        input(1).toDouble
+      }
     }
   }
 
@@ -256,7 +260,7 @@ class Console {
     println(s"found $x $y")
   }
 
-  private def readLine: List[String] = {
-    reader.readLine().split("\\s+").toList
+  private def readLine: Array[String] = {
+    reader.readLine().split("\\s+")
   }
 }
