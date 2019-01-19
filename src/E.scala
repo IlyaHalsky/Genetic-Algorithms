@@ -1,52 +1,30 @@
+/*
 import java.io.{BufferedReader, InputStreamReader}
 
 import scala.annotation.tailrec
-import scala.collection.immutable.Seq
+import scala.collection.immutable
 import scala.math._
-
-object Settings {
-  val comparePrecision: Double = 0.5d
-  val side: Int = 10
-  val r: Double = 9000.0d
-}
-
-import Settings._
 
 object E extends App {
 
-  def findTreasure(start: Circle)(implicit console: Console): (Int, Int) = {
+  def findTreasure(start: Circle,console: Console): (Int, Int) = {
     def getCircle(point: Point): Circle =
       C(point, console.activate(point, true))
 
     val center = start.center
     val left = getCircle(center.move(-1, 0))
-    val right = getCircle(center.move(+1, 0))
     val top = getCircle(center.move(0, 1))
-    val bot = getCircle(center.move(0, -1))
     val horizontal = left /\ start /\ top
-    val vertical = bot /\ start /\ right
-    (horizontal, vertical) match {
-      case (Some(p), None) ⇒
-        p.toInt
-      case (None, Some(p)) ⇒
-        p.toInt
-      case (Some(p1), Some(p2)) ⇒
-        val d1 = console.activate(p1, true)
-        val d2 = console.activate(p2, true)
-        if (d1 <= d2)
-          p1.toInt
-        else
-          p2.toInt
-    }
+    horizontal.get.toInt
   }
 
-  def findLabyrinth(mn: (Int, Int))(implicit console: Console): Labyrinth = {
-    val circles: Array[Circle] =
+  def findLabyrinth(mn: (Int, Int), console: Console): Labyrinth = {
+    val circles: immutable.Seq[Circle] =
       for {
-        angle ← Range(0, 360, 10).toArray
+        angle ← Range(0, 360, 12)
         rad = toRadians(angle)
       } yield {
-        val searchPoint = IntP(r * cos(rad), r * sin(rad))
+        val searchPoint = IntP(9000.0d * cos(rad), 9000.0d * sin(rad))
         C(searchPoint, console.activate(searchPoint))
       }
     val points = for {
@@ -55,7 +33,7 @@ object E extends App {
       circles(i) /\ circles(i+1) /\ circles(i+2)
     }
     val labPoints = findUnique(points.flatten.toList)
-    assert(labPoints.size >= 3)
+    //assert(labPoints.size >= 3)
     Labyrinth(labPoints, mn)
   }
 
@@ -71,13 +49,13 @@ object E extends App {
     }
   }
 
-  implicit val console: Console = new Console
+  val console: Console = new Console
   val mn = console.getMN
-  val lab: Labyrinth = findLabyrinth(mn)
-  val best = lab.findBest
-  if (best.r > 10.0)
-    while (true) Thread.sleep(10)
-  val (ax, ay) = findTreasure(best)
+  val lab: Labyrinth = findLabyrinth(mn,console)
+  val best = lab.findBest(console)
+  /*if (best.r > 10.0)
+    while (true) Thread.sleep(10)*/
+  val (ax, ay) = findTreasure(best,console)
   console.submit(ax, ay)
 }
 
@@ -85,8 +63,8 @@ case class Labyrinth(points: List[Point], mn: (Int, Int)) {
   private val (m, n) = mn
   private val (a, b, c) = {
     val a :: rest = points
-    val b = rest.find(p ⇒ (p - a) ~= m * side).get // Can fail
-    val c = rest.find(p ⇒ (p - b) ~= n * side).get // Can fail #2
+    val b = rest.find(p ⇒ (p - a) ~= m * 10).get // Can fail
+    val c = rest.find(p ⇒ (p - b) ~= n * 10).get // Can fail #2
     (a, b, c)
   }
 
@@ -96,7 +74,7 @@ case class Labyrinth(points: List[Point], mn: (Int, Int)) {
   private def getPoint(i: Int, j: Int): Point =
     (b + abi * (i + 0.5) + cbi * (j + 0.5)).toPoint
 
-  def findBest(implicit console: Console): Circle = {
+  def findBest(console: Console): Circle = {
     var minP: Point = Point(10000000.0, 10000000.0)
     var minD = 10000000.0
     for {
@@ -139,10 +117,10 @@ case class Vector(x: Double, y: Double) {
   def length: Double = lengthP
 
   def ~=(dist: Double): Boolean =
-    abs(length - dist) < comparePrecision
+    abs(length - dist) < 0.5d
 
   def normalize: Vector =
-    this * side / lengthP
+    this * 10 / lengthP
 }
 
 object IntP {
@@ -164,7 +142,7 @@ case class Point(x: Double, y: Double) {
     Vector(x - other.x, y - other.y)
   }
   def ~=(other: Point): Boolean =
-    abs(x - other.x) < comparePrecision && abs(y - other.y) < comparePrecision
+    abs(x - other.x) < 0.5d && abs(y - other.y) < 0.5d
 
   def toInt: (Int, Int) =
     (round(x).toInt, round(y).toInt)
@@ -205,29 +183,13 @@ case class Circle(center: Point, r: Double) {
   }
 
   def /\(other: Point): Boolean = {
-    abs((other.x - x) * (other.x - x) + (other.y - y) * (other.y - y) - r * r) < comparePrecision
+    abs((other.x - x) * (other.x - x) + (other.y - y) * (other.y - y) - r * r) < 0.5d
   }
 }
 
 case class Intersection(points: List[Point]) {
   def /\(other: Circle): Option[Point] =
     points.find(p ⇒ other /\ p)
-}
-
-trait Response {
-  def distance(inside: Boolean = false): Double
-}
-
-case class Outside(distance: Double) extends Response {
-  def distance(inside: Boolean = false): Double = if (inside) 1000000.0 else distance
-}
-
-case class Inside(distance: Double) extends Response {
-  def distance(inside: Boolean = false): Double = distance
-}
-
-case class Blocked() extends Response {
-  def distance(inside: Boolean = false): Double = 1000000.0
 }
 
 class Console {
@@ -263,4 +225,4 @@ class Console {
   private def readLine: Array[String] = {
     reader.readLine().split("\\s+")
   }
-}
+}*/
